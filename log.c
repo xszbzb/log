@@ -53,7 +53,7 @@ static const char *s_strLogType[] =
 
 S_LOG g_log = {0};
 
-//��  ��: ɾ����ʱ��־�ļ�
+//功  能: 删除超时日志文件
 static void log_del_timeout_file(S_LOG *pLog)
 {
 	if (pLog->hour == 0)
@@ -72,7 +72,7 @@ static void log_del_timeout_file(S_LOG *pLog)
 		{
 			strcpy(delFile, ffd.cFileName);
 			FindNextFileA(hFind, &ffd);
-			//ʱ����10����Ϊ��λ,6����60����,144��24Сʱ
+			//时间以10分钟为单位,6代表60分钟,144是24小时
 			if (ffd.ftLastWriteTime.dwHighDateTime + pLog->hour * 6 < SystemTimeAsFileTime.dwHighDateTime)
 			{
 				DeleteFileA(delFile);
@@ -83,16 +83,16 @@ static void log_del_timeout_file(S_LOG *pLog)
 #else
 	{
 		char delFile[MAX_LOG_PATH_NAME_T] = {0};
-		//ʱ���Է���Ϊ��λ
+		//时间以分钟为单位
 		sprintf(delFile, "find -mmin +%u -name \"*.log\" -exec rm -f {} \\;", (unsigned int)(pLog->hour * 60));
 		system(delFile);
 	}
 #endif
 }
 
-//��  ��: ����һ���µ���־�ļ�
-//��  ��: pLogָ������־�ṹ��
-//����ֵ: 
+//功  能: 创建一个新的日志文件
+//参  数: pLog指定的日志结构体
+//返回值: 
 static void log_new_file(S_LOG *pLog)
 {
 	int len = 0;
@@ -129,26 +129,24 @@ static void log_new_file(S_LOG *pLog)
 	return;
 }
 
-//��  ��: �ͷ���־�ļ���Ӧ���ļ�ָ��
-//��  ��: pLogָ������־�ṹ��
-//����ֵ: 
+//功  能: 释放日志文件对应的文件指针
+//参  数: pLog指定的日志结构体
+//返回值: 
 void log_close(S_LOG *pLog)
 {
+	pthread_mutex_lock(ghMutex);
 	if (pLog != NULL && pLog->fp != NULL)
 	{
 		fclose(pLog->fp);
 		pLog->fp = NULL;
 	}
-	if (NULL != ghMutex)
-	{
-		pthread_mutex_destroy(ghMutex);
-		ghMutex = NULL;
-	}
+	//printf("close\n");
+	pthread_mutex_destroy(ghMutex);
 }
 
-//��  ��: д��־��ָ������־�ļ���
-//��  ��: pLogָ������־�ṹ��,level������־��Ϣ�ȼ�,����Ĳ�����printf
-//����ֵ: 
+//功  能: 写日志到指定的日志文件中
+//参  数: pLog指定的日志结构体,level代表日志信息等级,后面的参数如printf
+//返回值: 
 void log_write(S_LOG *pLog, E_LOG_LEVEL level, const char *msgfmt, ...)
 {
 	if (level > pLog->level)
@@ -175,40 +173,38 @@ void log_write(S_LOG *pLog, E_LOG_LEVEL level, const char *msgfmt, ...)
 		vsnprintf(pos, MAX_LOG_LINE_SIZE - sz, msgfmt, ap);  
 		va_end(ap);
 
-		if (pLog->count != 0)
+		pthread_mutex_lock(ghMutex);
+		if (NULL == pLog->fp)
 		{
-			pthread_mutex_lock(ghMutex);
-			if (++pLog->seq > MAX_LOG_SEQ)
-			{
-				if ((long)pLog->size < ftell(pLog->fp))
-				{
-					log_new_file(pLog);
-				}
-				else
-				{
-					pLog->seq = 0;
-				}
-			}
-			fprintf(pLog->fp, "%s", (char*)message);
-			fflush(pLog->fp);
 			pthread_mutex_unlock(ghMutex);
+			//printf("file close\n");
+			return;
 		}
-		else
+		if (pLog->count != 0 && ++pLog->seq > MAX_LOG_SEQ)
 		{
-			fprintf(pLog->fp, "%s", (char*)message);
-			fflush(pLog->fp);
+			if ((long)pLog->size < ftell(pLog->fp))
+			{
+				log_new_file(pLog);
+			}
+			else
+			{
+				pLog->seq = 0;
+			}
 		}
+		fprintf(pLog->fp, "%s", (char*)message);
+		fflush(pLog->fp);
+		pthread_mutex_unlock(ghMutex);
 	}
 }
 
-//��  ��: ����Ĭ����־�ļ�����ȼ�������
-//��  ��: 	char strPathName[MAX_LOG_PATH_NAME_T];//��־�ļ�·����ǰ׺,Ϊ��ʱ���Զ���ȡ
-//			size_t seq;//д��seq����־����һ���ļ��и��ж�
-//			size_t hour;//����ʱ��Сʱ��,����ʱ��ᱻɾ��
-//			size_t count;//��־�ļ��������,Ϊ0ʱ�������ļ�,Ϊ1ʱ�����ļ������ˢ����д
-//			size_t size;//��־�ļ���С���������
-//			E_LOG_LEVEL level;//��ӡ��־����
-//����ֵ:   0Ϊ�ɹ�
+//功  能: 设置默认日志文件输出等级和名字
+//参  数: 	char strPathName[MAX_LOG_PATH_NAME_T];//日志文件路径名前缀,为空时会自动获取
+//			size_t seq;//写入seq次日志后做一次文件切割判断
+//			size_t hour;//保存时间小时数,超过时间会被删除
+//			size_t count;//日志文件保存个数,为0时不换新文件,为1时单个文件超大后刷新重写
+//			size_t size;//日志文件大小超过多大换新
+//			E_LOG_LEVEL level;//打印日志级别
+//返回值:   0为成功
 int log_open(S_LOG *pLog, const char *strPathName, E_LOG_LEVEL level, size_t count, size_t size, size_t hour)
 {
 	int len = 0;
