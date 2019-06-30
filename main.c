@@ -1,4 +1,6 @@
-﻿//gcc *.c  -o main -lpthread
+//gcc *.c  -o main -lpthread
+//for((i=0;i<10000000;i++));{ ./main;}
+
 #include "log.h"
 
 #ifdef _WIN32
@@ -24,7 +26,7 @@
 THREAD_FUNC_RETURN_TYPE ThreadFunc(void* lpParameter)
 {
 	int i = 0;
-	for (; i < 1000000; i++)
+	for (; i < 100000000; i++)
 	{
 		LOG_WRITE(LOG_LEVEL_ERROR, "LOG_WRITE %d\n", LOG_LEVEL_ERROR);
 		LOG_WRITE_P(LOG_LEVEL_ERROR, "LOG_WRITE_P %d\n", LOG_LEVEL_ERROR);
@@ -41,7 +43,7 @@ int main()
 {
 	int i = 0;
     printf("Hello World!\n"); 
-	log_open(&g_log, "", LOG_LEVEL_ERROR, 10, 2000000, 0);
+	log_open(&g_log, "", LOG_LEVEL_ERROR, 10, 3000000, 0);
 	for (; i < 4; i++)
 	{
 		pthread_t ntid;
@@ -54,5 +56,6 @@ int main()
 	}
 	Sleep(10000);
 	log_close(&g_log);
+	Sleep(100);
 	return  1;
 }
