@@ -5,7 +5,8 @@ extern "C" {
 
 #ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS
-#include <windows.h>
+#include <winsock2.h>
+#include <timeapi.h>
 #include <process.h>
 #pragma comment( lib,"winmm.lib" )
 
@@ -155,22 +156,19 @@ void log_write(S_LOG *pLog, E_LOG_LEVEL level, const char *msgfmt, ...)
 	}
 	{
 		va_list ap;
-		char *pos, message[MAX_LOG_LINE_SIZE+1] = {0};
-		size_t sz, len;
+		char message[MAX_LOG_LINE_SIZE+1] = {0};
+		size_t len;
 		time_t t;
 		struct timeval tv;
 
 		time(&t);
 		len = strftime(message, MAX_LOG_LINE_SIZE,"%Y-%m-%d %H:%M:%S", localtime(&t));
 		gettimeofday(&tv, NULL);
-		_snprintf(&message[len], MAX_LOG_LINE_SIZE-len, ".%ld", tv.tv_usec);
-		len = strlen(message);
-		_snprintf(&message[len], MAX_LOG_LINE_SIZE-len, "[%s]", s_strLogType[level]);
+		len += _snprintf(&message[len], MAX_LOG_LINE_SIZE-len, ".%ld", tv.tv_usec);
+		len += _snprintf(&message[len], MAX_LOG_LINE_SIZE-len, "[%s]", s_strLogType[level]);
 		message[MAX_LOG_LINE_SIZE] = '\0';
-		sz = strlen(message);
-		pos = (char*)message + sz;
 		va_start(ap, msgfmt);
-		vsnprintf(pos, MAX_LOG_LINE_SIZE - sz, msgfmt, ap);  
+		vsnprintf(&message[len], MAX_LOG_LINE_SIZE - len, msgfmt, ap);
 		va_end(ap);
 
 		pthread_mutex_lock(ghMutex);
@@ -191,7 +189,7 @@ void log_write(S_LOG *pLog, E_LOG_LEVEL level, const char *msgfmt, ...)
 				pLog->seq = 0;
 			}
 		}
-		fprintf(pLog->fp, "%s", (char*)message);
+		fprintf(pLog->fp, "%s\n", (char*)message);
 		fflush(pLog->fp);
 		pthread_mutex_unlock(ghMutex);
 	}
