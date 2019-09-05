@@ -71,7 +71,6 @@ extern S_LOG g_log;
 
 //功  能: 设置默认日志文件输出等级和名字
 //参  数: 	char strPathName[MAX_LOG_PATH_NAME_T];//日志文件路径名前缀,为空时会自动获取
-//			size_t seq;//写入seq次日志后做一次文件切割判断
 //			size_t hour;//保存时间小时数,超过时间会被删除
 //			size_t count;//日志文件保存个数,为0时不换新文件,为1时单个文件超大后刷新重写
 //			size_t size;//日志文件大小超过多大换新
